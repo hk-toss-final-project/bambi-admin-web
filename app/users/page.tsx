@@ -5,46 +5,13 @@
 // 데이터는 아직 mock (mock-users.ts). 계정 활성/비활성 토글도 지금은 화면 안에서만 동작하고,
 // 실제 API(우석·영현 도메인)가 나오면 fetchAdminUsers 와 toggle 부분을 실제 호출로 바꾼다.
 
-import { useEffect, useState } from "react";
-
-import { resolveErrorMessage } from "@/constants/errors";
-import { ApiError } from "@/lib/api-client";
-
 import { EmptyState, ErrorState, LoadingRows } from "../_components/async-states";
+import { useAsyncData } from "../_hooks/use-async-data";
 import { type AdminUser, fetchAdminUsers } from "./mock-users";
 
 export default function AdminUsersPage() {
-  // null = 아직 로딩 중, [] = 불러왔는데 비어 있음 → 이 둘을 구분해서 화면을 다르게 보여준다.
-  const [users, setUsers] = useState<AdminUser[] | null>(null);
-  // 불러오기 실패 시 사용자에게 보여줄 문구. null = 오류 없음.
-  // 지금은 mock 이라 안 터지지만, fetchAdminUsers 를 apiGet 으로 바꾸면 실패 시 ApiError 가 올라온다.
-  const [error, setError] = useState<string | null>(null);
-  // 재시도 버튼을 누르면 이 값을 올려 useEffect 를 다시 돌린다.
-  const [reloadKey, setReloadKey] = useState(0);
-
-  // 재시도: 로딩 상태로 되돌린 뒤 다시 불러온다. (리셋은 이벤트 핸들러에서 — effect 안 동기 setState 회피)
-  function retry() {
-    setUsers(null);
-    setError(null);
-    setReloadKey((k) => k + 1);
-  }
-
-  useEffect(() => {
-    let alive = true; // 화면을 벗어난 뒤 늦게 도착한 응답이 상태를 건드리지 않게 막는 가드
-    fetchAdminUsers()
-      .then((rows) => {
-        if (alive) setUsers(rows);
-      })
-      .catch((err) => {
-        // 서버 error.message 원문은 노출하지 않고, code 로 문구를 결정한다(CLAUDE.md §4).
-        if (!alive) return;
-        const code = err instanceof ApiError ? err.code : undefined;
-        setError(resolveErrorMessage(code));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [reloadKey]);
+  // users === null 로딩 중 · [] 불러왔지만 비어 있음 · error 실패 — 이 셋으로 화면을 분기한다.
+  const { data: users, error, retry, setData: setUsers } = useAsyncData(fetchAdminUsers);
 
   // 계정 활성/비활성 뒤집기. 지금은 로컬 상태만 바꾼다.
   // TODO(api): 실제로는 여기서 apiPost(`/api/admin/users/${id}/status`, ...) 를 부르고 성공 시 반영.

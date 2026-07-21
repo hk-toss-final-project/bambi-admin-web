@@ -5,42 +5,13 @@
 // 관리자가 훑어보는 곳. 데이터는 아직 mock(mock-logs.ts)이고, 실제 Gateway(P1)가
 // ai_request_logs/ai_response_logs를 내려주면 fetchAiLogs 만 실제 호출로 바꾼다.
 
-import { useEffect, useState } from "react";
-
-import { resolveErrorMessage } from "@/constants/errors";
-import { ApiError } from "@/lib/api-client";
-
 import { EmptyState, ErrorState, LoadingRows } from "../_components/async-states";
+import { useAsyncData } from "../_hooks/use-async-data";
 import { type AdminAiLog, type AiLogStatus, fetchAiLogs } from "./mock-logs";
 
 export default function AdminAiLogsPage() {
-  // null = 로딩 중, [] = 불러왔으나 로그 없음 → 사용자 목록 화면과 같은 3분기 규칙.
-  const [logs, setLogs] = useState<AdminAiLog[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  function retry() {
-    setLogs(null);
-    setError(null);
-    setReloadKey((k) => k + 1);
-  }
-
-  useEffect(() => {
-    let alive = true;
-    fetchAiLogs()
-      .then((rows) => {
-        if (alive) setLogs(rows);
-      })
-      .catch((err) => {
-        // 서버 원문 대신 code로 문구를 고른다(CLAUDE.md §4).
-        if (!alive) return;
-        const code = err instanceof ApiError ? err.code : undefined;
-        setError(resolveErrorMessage(code));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [reloadKey]);
+  // 사용자 목록과 같은 3분기: logs === null 로딩 · [] 로그 없음 · error 실패.
+  const { data: logs, error, retry } = useAsyncData(fetchAiLogs);
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
