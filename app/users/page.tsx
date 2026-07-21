@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { resolveErrorMessage } from "@/constants/errors";
 import { ApiError } from "@/lib/api-client";
 
+import { EmptyState, ErrorState, LoadingRows } from "../_components/async-states";
 import { type AdminUser, fetchAdminUsers } from "./mock-users";
 
 export default function AdminUsersPage() {
@@ -71,9 +72,9 @@ export default function AdminUsersPage() {
       {error !== null ? (
         <ErrorState message={error} onRetry={retry} />
       ) : users === null ? (
-        <LoadingState />
+        <LoadingRows />
       ) : users.length === 0 ? (
-        <EmptyState />
+        <EmptyState message="아직 표시할 사용자가 없습니다." />
       ) : (
         <UserTable users={users} onToggle={toggleStatus} />
       )}
@@ -180,46 +181,3 @@ function PlanBadge({ plan }: { plan: AdminUser["plan"] }) {
   );
 }
 
-function LoadingState() {
-  // mock 은 즉시 오지만, 실제 API 로 바뀌면 잠깐 보일 자리. 표 모양의 스켈레톤을 흉내낸다.
-  return (
-    <div className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div
-          key={i}
-          className="h-10 animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800/60"
-        />
-      ))}
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-xl border border-dashed border-zinc-300 py-16 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-      아직 표시할 사용자가 없습니다.
-    </div>
-  );
-}
-
-function ErrorState({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
-  // 목록을 못 불러왔을 때. 문구는 code 기준으로 고른 것을 받고, 여기선 재시도 길만 열어준다.
-  return (
-    <div className="rounded-xl border border-zinc-200 py-16 text-center dark:border-zinc-800">
-      <p className="text-sm text-zinc-600 dark:text-zinc-300">{message}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="mt-4 rounded-lg border border-zinc-200 px-4 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-      >
-        다시 시도
-      </button>
-    </div>
-  );
-}
