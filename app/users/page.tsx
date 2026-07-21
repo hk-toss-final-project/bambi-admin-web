@@ -1,13 +1,13 @@
 "use client";
 
 // 관리자 — 사용자 목록 화면.
-// 목업: bambi-service-web/docs/design-handoff/admin/admin-users-rough.html
-// 데이터는 아직 mock (mock-users.ts). 계정 활성/비활성 토글도 지금은 화면 안에서만 동작하고,
-// 실제 API(우석·영현 도메인)가 나오면 fetchAdminUsers 와 toggle 부분을 실제 호출로 바꾼다.
+// 데이터는 service-api 실연동(admin-users.ts, GET /api/admin/users).
+// 단, 계정 활성/비활성 토글은 아직 화면 안에서만 동작한다 — 상태 변경 API(PATCH)가 나오면
+// toggleStatus 를 실제 호출로 바꾼다. (조회는 실데이터, 변경은 로컬 상태 mock)
 
 import { EmptyState, ErrorState, LoadingRows } from "../_components/async-states";
 import { useAsyncData } from "../_hooks/use-async-data";
-import { type AdminUser, fetchAdminUsers } from "./mock-users";
+import { type AdminUser, fetchAdminUsers } from "./admin-users";
 
 export default function AdminUsersPage() {
   // users === null 로딩 중 · [] 불러왔지만 비어 있음 · error 실패 — 이 셋으로 화면을 분기한다.
@@ -58,16 +58,13 @@ function UserTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+      <table className="w-full min-w-[560px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
             <th className="px-4 py-3 font-medium">사용자</th>
             <th className="px-4 py-3 font-medium">이메일</th>
             <th className="px-4 py-3 font-medium">가입일</th>
-            <th className="px-4 py-3 font-medium">플랜</th>
             <th className="px-4 py-3 font-medium">상태</th>
-            <th className="px-4 py-3 font-medium">최근 활동</th>
-            <th className="px-4 py-3 text-right font-medium">공개 브리핑</th>
             <th className="px-4 py-3 text-right font-medium">관리</th>
           </tr>
         </thead>
@@ -89,16 +86,7 @@ function UserTable({
                   {u.joinedAt}
                 </td>
                 <td className="px-4 py-3">
-                  <PlanBadge plan={u.plan} />
-                </td>
-                <td className="px-4 py-3">
                   <StatusBadge active={active} />
-                </td>
-                <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
-                  {u.lastActive}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums text-zinc-700 dark:text-zinc-300">
-                  {u.publicBriefings}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button
@@ -133,18 +121,4 @@ function StatusBadge({ active }: { active: boolean }) {
   );
 }
 
-function PlanBadge({ plan }: { plan: AdminUser["plan"] }) {
-  const isPro = plan === "PRO";
-  return (
-    <span
-      className={
-        isPro
-          ? "rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-          : "rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-      }
-    >
-      {isPro ? "Pro" : "Free"}
-    </span>
-  );
-}
 
