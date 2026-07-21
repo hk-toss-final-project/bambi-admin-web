@@ -5,23 +5,13 @@
 // 데이터는 아직 mock (mock-users.ts). 계정 활성/비활성 토글도 지금은 화면 안에서만 동작하고,
 // 실제 API(우석·영현 도메인)가 나오면 fetchAdminUsers 와 toggle 부분을 실제 호출로 바꾼다.
 
-import { useEffect, useState } from "react";
-
+import { EmptyState, ErrorState, LoadingRows } from "../_components/async-states";
+import { useAsyncData } from "../_hooks/use-async-data";
 import { type AdminUser, fetchAdminUsers } from "./mock-users";
 
 export default function AdminUsersPage() {
-  // null = 아직 로딩 중, [] = 불러왔는데 비어 있음 → 이 둘을 구분해서 화면을 다르게 보여준다.
-  const [users, setUsers] = useState<AdminUser[] | null>(null);
-
-  useEffect(() => {
-    let alive = true; // 화면을 벗어난 뒤 늦게 도착한 응답이 상태를 건드리지 않게 막는 가드
-    fetchAdminUsers().then((rows) => {
-      if (alive) setUsers(rows);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  // users === null 로딩 중 · [] 불러왔지만 비어 있음 · error 실패 — 이 셋으로 화면을 분기한다.
+  const { data: users, error, retry, setData: setUsers } = useAsyncData(fetchAdminUsers);
 
   // 계정 활성/비활성 뒤집기. 지금은 로컬 상태만 바꾼다.
   // TODO(api): 실제로는 여기서 apiPost(`/api/admin/users/${id}/status`, ...) 를 부르고 성공 시 반영.
@@ -46,10 +36,12 @@ export default function AdminUsersPage() {
         </p>
       </header>
 
-      {users === null ? (
-        <LoadingState />
+      {error !== null ? (
+        <ErrorState message={error} onRetry={retry} />
+      ) : users === null ? (
+        <LoadingRows />
       ) : users.length === 0 ? (
-        <EmptyState />
+        <EmptyState message="아직 표시할 사용자가 없습니다." />
       ) : (
         <UserTable users={users} onToggle={toggleStatus} />
       )}
@@ -156,24 +148,3 @@ function PlanBadge({ plan }: { plan: AdminUser["plan"] }) {
   );
 }
 
-function LoadingState() {
-  // mock 은 즉시 오지만, 실제 API 로 바뀌면 잠깐 보일 자리. 표 모양의 스켈레톤을 흉내낸다.
-  return (
-    <div className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div
-          key={i}
-          className="h-10 animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800/60"
-        />
-      ))}
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="rounded-xl border border-dashed border-zinc-300 py-16 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-      아직 표시할 사용자가 없습니다.
-    </div>
-  );
-}

@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 // 관리자 콘솔 홈. P0 화면 2개(사용자 목록·AI 로그)로 들어가는 입구.
-// AI 로그는 아직 미구현이라 자리만 표시해 둔다.
 
 export default function AdminHome() {
   return (
@@ -26,14 +25,17 @@ export default function AdminHome() {
           </p>
         </Link>
 
-        <div className="rounded-xl border border-dashed border-zinc-200 p-5 dark:border-zinc-800">
-          <div className="text-base font-semibold text-zinc-400 dark:text-zinc-500">
+        <Link
+          href="/logs"
+          className="rounded-xl border border-zinc-200 p-5 transition-colors hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:border-zinc-700 dark:hover:bg-zinc-900/40"
+        >
+          <div className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
             AI 처리 로그
           </div>
-          <p className="mt-1 text-sm text-zinc-400 dark:text-zinc-500">
-            준비 중
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Agent 호출 처리 내역 · 성공/실패 추적
           </p>
-        </div>
+        </Link>
       </div>
     </main>
   );
