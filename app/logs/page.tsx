@@ -1,13 +1,13 @@
 "use client";
 
 // 관리자 — AI 처리 로그 화면.
-// 저장→요약→카드 흐름에서 Agent 호출이 어떻게 처리됐는지(성공·실패·진행 중)를
-// 관리자가 훑어보는 곳. 데이터는 아직 mock(mock-logs.ts)이고, 실제 Gateway(P1)가
-// ai_request_logs/ai_response_logs를 내려주면 fetchAiLogs 만 실제 호출로 바꾼다.
+// Agent 호출이 어떻게 처리됐는지(성공·실패·진행 중)를 관리자가 훑어보는 곳.
+// 데이터는 service-api 실연동(ai-logs.ts, GET /api/admin/ai-logs).
+// 단, 로그 적재는 실제 Gateway(P1)부터라 그전까진 빈 목록(Empty)이 정상이다.
 
 import { EmptyState, ErrorState, LoadingRows } from "../_components/async-states";
 import { useAsyncData } from "../_hooks/use-async-data";
-import { type AdminAiLog, type AiLogStatus, fetchAiLogs } from "./mock-logs";
+import { type AdminAiLog, type AiLogStatus, fetchAiLogs } from "./ai-logs";
 
 export default function AdminAiLogsPage() {
   // 사용자 목록과 같은 3분기: logs === null 로딩 · [] 로그 없음 · error 실패.
@@ -40,16 +40,14 @@ export default function AdminAiLogsPage() {
 function LogTable({ logs }: { logs: AdminAiLog[] }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <table className="w-full min-w-[760px] border-collapse text-sm">
+      <table className="w-full min-w-[640px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
             <th className="px-4 py-3 font-medium">시각</th>
             <th className="px-4 py-3 font-medium">사용자</th>
-            <th className="px-4 py-3 font-medium">작업</th>
-            <th className="px-4 py-3 font-medium">모델</th>
+            <th className="px-4 py-3 font-medium">엔드포인트</th>
             <th className="px-4 py-3 font-medium">상태</th>
             <th className="px-4 py-3 text-right font-medium">소요시간</th>
-            <th className="px-4 py-3 font-medium">비고</th>
           </tr>
         </thead>
         <tbody>
@@ -59,26 +57,20 @@ function LogTable({ logs }: { logs: AdminAiLog[] }) {
               className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-900/40"
             >
               <td className="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">
-                {row.requestedAt}
+                {formatTime(row.requestedAt)}
               </td>
               <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                {row.userEmail}
+                {row.userEmail ?? "—"}
               </td>
-              <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100">
-                {row.task}
-              </td>
-              <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
-                {row.model}
+              {/* 엔드포인트는 어떤 agent 호출이었는지를 가리킨다 — 경로라 등폭(mono)으로. */}
+              <td className="px-4 py-3 font-mono text-xs text-zinc-600 dark:text-zinc-300">
+                {row.endpoint}
               </td>
               <td className="px-4 py-3">
                 <StatusBadge status={row.status} />
               </td>
               <td className="px-4 py-3 text-right tabular-nums text-zinc-500 dark:text-zinc-400">
                 {formatLatency(row.latencyMs)}
-              </td>
-              {/* 실패 사유는 이 화면의 핵심 정보라 흐리게 죽이지 않고 그대로 보여준다. */}
-              <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
-                {row.failureReason ?? "—"}
               </td>
             </tr>
           ))}
@@ -125,6 +117,11 @@ function StatusBadge({ status }: { status: AiLogStatus }) {
       {badge.label}
     </span>
   );
+}
+
+/** 백엔드 ISO 시각을 "YYYY-MM-DD HH:mm" 로. 문자열만 잘라 시간대·hydration 흔들림을 피한다. */
+function formatTime(iso: string): string {
+  return iso.replace("T", " ").slice(0, 16);
 }
 
 /** 소요시간을 사람이 읽기 편한 단위로. 아직 안 끝난 요청은 값이 없으니 "—". */
