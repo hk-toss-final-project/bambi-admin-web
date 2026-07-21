@@ -7,21 +7,43 @@
 
 import { useEffect, useState } from "react";
 
+import { resolveErrorMessage } from "@/constants/errors";
+import { ApiError } from "@/lib/api-client";
+
 import { type AdminUser, fetchAdminUsers } from "./mock-users";
 
 export default function AdminUsersPage() {
   // null = 아직 로딩 중, [] = 불러왔는데 비어 있음 → 이 둘을 구분해서 화면을 다르게 보여준다.
   const [users, setUsers] = useState<AdminUser[] | null>(null);
+  // 불러오기 실패 시 사용자에게 보여줄 문구. null = 오류 없음.
+  // 지금은 mock 이라 안 터지지만, fetchAdminUsers 를 apiGet 으로 바꾸면 실패 시 ApiError 가 올라온다.
+  const [error, setError] = useState<string | null>(null);
+  // 재시도 버튼을 누르면 이 값을 올려 useEffect 를 다시 돌린다.
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // 재시도: 로딩 상태로 되돌린 뒤 다시 불러온다. (리셋은 이벤트 핸들러에서 — effect 안 동기 setState 회피)
+  function retry() {
+    setUsers(null);
+    setError(null);
+    setReloadKey((k) => k + 1);
+  }
 
   useEffect(() => {
     let alive = true; // 화면을 벗어난 뒤 늦게 도착한 응답이 상태를 건드리지 않게 막는 가드
-    fetchAdminUsers().then((rows) => {
-      if (alive) setUsers(rows);
-    });
+    fetchAdminUsers()
+      .then((rows) => {
+        if (alive) setUsers(rows);
+      })
+      .catch((err) => {
+        // 서버 error.message 원문은 노출하지 않고, code 로 문구를 결정한다(CLAUDE.md §4).
+        if (!alive) return;
+        const code = err instanceof ApiError ? err.code : undefined;
+        setError(resolveErrorMessage(code));
+      });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   // 계정 활성/비활성 뒤집기. 지금은 로컬 상태만 바꾼다.
   // TODO(api): 실제로는 여기서 apiPost(`/api/admin/users/${id}/status`, ...) 를 부르고 성공 시 반영.
@@ -46,7 +68,9 @@ export default function AdminUsersPage() {
         </p>
       </header>
 
-      {users === null ? (
+      {error !== null ? (
+        <ErrorState message={error} onRetry={retry} />
+      ) : users === null ? (
         <LoadingState />
       ) : users.length === 0 ? (
         <EmptyState />
@@ -174,6 +198,28 @@ function EmptyState() {
   return (
     <div className="rounded-xl border border-dashed border-zinc-300 py-16 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
       아직 표시할 사용자가 없습니다.
+    </div>
+  );
+}
+
+function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  // 목록을 못 불러왔을 때. 문구는 code 기준으로 고른 것을 받고, 여기선 재시도 길만 열어준다.
+  return (
+    <div className="rounded-xl border border-zinc-200 py-16 text-center dark:border-zinc-800">
+      <p className="text-sm text-zinc-600 dark:text-zinc-300">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 rounded-lg border border-zinc-200 px-4 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+      >
+        다시 시도
+      </button>
     </div>
   );
 }
