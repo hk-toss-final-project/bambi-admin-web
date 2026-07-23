@@ -27,3 +27,20 @@ export type AdminAiLog = {
 export function fetchAiLogs(): Promise<AdminAiLog[]> {
   return apiGet<AdminAiLog[]>("/api/admin/ai-logs");
 }
+
+/**
+ * 로그 한 건의 상세 — 목록 필드에 요청·응답 본문을 더한다.
+ * body 는 저장 원문 문자열(대개 JSON, agent 연결 실패 시 응답은 에러 평문일 수 있음).
+ * 아직 처리 중이면 응답측 값(statusCode·respondedAt·responseBody)은 null 이다.
+ */
+export type AdminAiLogDetail = AdminAiLog & {
+  statusCode: number | null; // agent 응답 HTTP 코드
+  respondedAt: string | null; // 응답 기록 시각 (ISO)
+  requestBody: string | null; // service → agent 요청 본문 원문
+  responseBody: string | null; // agent → service 응답 본문 원문
+};
+
+/** 로그 한 건 상세를 가져온다. 없으면 공통 client 가 ApiError(NOT_FOUND) 로 throw 한다. */
+export function fetchAiLogDetail(id: number): Promise<AdminAiLogDetail> {
+  return apiGet<AdminAiLogDetail>(`/api/admin/ai-logs/${id}`);
+}
