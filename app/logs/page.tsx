@@ -3,15 +3,40 @@
 // 관리자 — AI 처리 로그 화면.
 // Agent 호출이 어떻게 처리됐는지(성공·실패·진행 중)를 관리자가 훑어보는 곳.
 // 데이터는 service-api 실연동(ai-logs.ts, GET /api/admin/ai-logs).
+// 상태 필터·검색(엔드포인트·이메일)은 client-side, 행을 누르면 상세(요청·응답 본문)를 모달로 연다.
 // 단, 로그 적재는 실제 Gateway(P1)부터라 그전까진 빈 목록(Empty)이 정상이다.
 
+import { useMemo, useState } from "react";
+
 import { EmptyState, ErrorState, LoadingRows } from "../_components/async-states";
+import { FilterTabs, NoMatchState, SearchInput } from "../_components/filters";
 import { useAsyncData } from "../_hooks/use-async-data";
 import { type AdminAiLog, type AiLogStatus, fetchAiLogs } from "./ai-logs";
+import { LogDetailDialog } from "./log-detail-dialog";
+
+type StatusFilter = "ALL" | AiLogStatus;
+
+const STATUS_FILTERS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
+  { value: "ALL", label: "전체" },
+  { value: "SUCCESS", label: "성공" },
+  { value: "FAILED", label: "실패" },
+  { value: "PROCESSING", label: "처리 중" },
+];
 
 export default function AdminAiLogsPage() {
   // 사용자 목록과 같은 3분기: logs === null 로딩 · [] 로그 없음 · error 실패.
   const { data: logs, error, retry } = useAsyncData(fetchAiLogs);
+
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  // 상세 모달로 열려 있는 로그 id. null 이면 닫힘.
+  const [openLogId, setOpenLogId] = useState<number | null>(null);
+
+  // 상태 필터 → 검색(엔드포인트·이메일) 순으로 거른다. 정렬은 백엔드 최신순을 그대로 쓴다.
+  const visibleLogs = useMemo(
+    () => (logs === null ? [] : filterLogs(logs, query, statusFilter)),
+    [logs, query, statusFilter],
+  );
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
@@ -31,13 +56,54 @@ export default function AdminAiLogsPage() {
       ) : logs.length === 0 ? (
         <EmptyState message="아직 처리된 AI 요청이 없습니다." />
       ) : (
-        <LogTable logs={logs} />
+        <>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="엔드포인트 · 사용자 검색"
+            />
+            <FilterTabs
+              options={STATUS_FILTERS}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+          </div>
+
+          {visibleLogs.length === 0 ? (
+            <NoMatchState message="검색·필터 조건에 맞는 로그가 없습니다." />
+          ) : (
+            <LogTable logs={visibleLogs} onSelect={setOpenLogId} />
+          )}
+        </>
       )}
+
+      {/* key={openLogId} — 로그마다 새로 mount 해 상태(로딩·본문)를 깔끔히 초기화한다. */}
+      <LogDetailDialog key={openLogId} logId={openLogId} onClose={() => setOpenLogId(null)} />
     </main>
   );
 }
 
-function LogTable({ logs }: { logs: AdminAiLog[] }) {
+/** 상태 필터와 검색어(엔드포인트·이메일, 대소문자 무시)로 거른다. */
+function filterLogs(logs: AdminAiLog[], query: string, status: StatusFilter): AdminAiLog[] {
+  const q = query.trim().toLowerCase();
+  return logs.filter((row) => {
+    if (status !== "ALL" && row.status !== status) return false;
+    if (q === "") return true;
+    return (
+      row.endpoint.toLowerCase().includes(q) ||
+      (row.userEmail?.toLowerCase().includes(q) ?? false)
+    );
+  });
+}
+
+function LogTable({
+  logs,
+  onSelect,
+}: {
+  logs: AdminAiLog[];
+  onSelect: (id: number) => void;
+}) {
   return (
     <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
       <table className="w-full min-w-[640px] border-collapse text-sm">
@@ -54,7 +120,8 @@ function LogTable({ logs }: { logs: AdminAiLog[] }) {
           {logs.map((row) => (
             <tr
               key={row.id}
-              className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-900/40"
+              onClick={() => onSelect(row.id)}
+              className="cursor-pointer border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-900/40"
             >
               <td className="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">
                 {formatTime(row.requestedAt)}
