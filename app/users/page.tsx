@@ -3,15 +3,33 @@
 // 관리자 — 사용자 목록 화면.
 // 데이터는 service-api 실연동(admin-users.ts, GET /api/admin/users).
 // 검색(이름·이메일)·상태 필터·열 정렬은 목록이 작아 화면 안(client-side)에서 처리한다.
-// 계정 활성/비활성 토글은 아직 화면 안에서만 동작한다 — 상태 변경 API(PATCH)가 나오면
-// toggleStatus 를 실제 호출로 바꾼다. (조회는 실데이터, 변경은 로컬 상태 mock)
+//
+// 행마다 두 가지를 할 수 있다:
+//  · 활성/비활성 — PATCH /status. 서버가 돌려준 값으로 그 줄만 고친다.
+//  · 컨텍스트 재동기화 — POST /context-sync. 관심사가 agent 에 안 붙은 계정 복구용.
+// 둘 다 결과를 화면에 알린다. 특히 재동기화는 눌러도 목록 모양이 안 변해서,
+// 알림이 없으면 됐는지 안 됐는지 알 길이 없다.
 
 import { useMemo, useState } from "react";
+
+import { resolveErrorMessage } from "@/constants/errors";
+import { ApiError } from "@/lib/api-client";
 
 import { EmptyState, ErrorState, LoadingRows } from "../_components/async-states";
 import { FilterTabs, NoMatchState, SearchInput } from "../_components/filters";
 import { useAsyncData } from "../_hooks/use-async-data";
-import { type AdminUser, fetchAdminUsers } from "./admin-users";
+import {
+  type AdminUser,
+  fetchAdminUsers,
+  resyncAgentContext,
+  setUserActive,
+} from "./admin-users";
+
+/** 행 조작의 결과 알림. 성공·실패를 같은 자리에 띄운다. */
+type Notice = { tone: "ok" | "error"; text: string };
+
+/** 진행 중인 행 조작 — 어느 행의 어떤 버튼을 눌렀는지. 그 버튼에만 진행 표시를 준다. */
+type RowAction = { id: number; kind: "toggle" | "resync" };
 
 type StatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
 type SortKey = "displayName" | "joinedAt" | "status";
@@ -43,16 +61,41 @@ export default function AdminUsersPage() {
     }
   }
 
-  // 계정 활성/비활성 뒤집기. 지금은 로컬 상태만 바꾼다.
-  // TODO(api): 실제로는 여기서 apiPost(`/api/admin/users/${id}/status`, ...) 를 부르고 성공 시 반영.
-  function toggleStatus(id: number) {
-    setUsers((prev) =>
-      prev?.map((u) =>
-        u.id === id
-          ? { ...u, status: u.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" }
-          : u,
-      ) ?? prev,
-    );
+  // 진행 중인 조작(어느 행의 어떤 버튼인지)과 마지막 결과 알림.
+  const [busy, setBusy] = useState<RowAction | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+
+  /** 행 조작 공통 — 한 번에 하나만, 결과는 성공이든 실패든 알린다. */
+  async function runRowAction(target: RowAction, run: () => Promise<string>) {
+    setBusy(target);
+    setNotice(null);
+    try {
+      setNotice({ tone: "ok", text: await run() });
+    } catch (err) {
+      // 서버 원문 대신 code 기준 문구를 쓴다(CLAUDE.md §2).
+      const code = err instanceof ApiError ? err.code : undefined;
+      setNotice({ tone: "error", text: resolveErrorMessage(code) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // 계정 활성/비활성 뒤집기. 서버가 돌려준 값으로 그 줄만 바꾼다(목록 전체 재조회 없이).
+  function toggleStatus(user: AdminUser) {
+    const nextActive = user.status !== "ACTIVE";
+    return runRowAction({ id: user.id, kind: "toggle" }, async () => {
+      const updated = await setUserActive(user.id, nextActive);
+      setUsers((prev) => prev?.map((u) => (u.id === updated.id ? updated : u)) ?? prev);
+      return `${updated.displayName} 계정을 ${nextActive ? "활성화" : "비활성화"}했습니다.`;
+    });
+  }
+
+  // agent 컨텍스트 강제 재동기화. 목록 모양은 안 변하므로 결과 문구로만 알린다.
+  function resyncContext(user: AdminUser) {
+    return runRowAction({ id: user.id, kind: "resync" }, async () => {
+      const result = await resyncAgentContext(user.id);
+      return `${user.displayName} 관심사를 agent 에 다시 보냈습니다 (버전 ${result.contextVersion}).`;
+    });
   }
 
   // 검색→필터→정렬을 순서대로 건 결과. 원본(users)은 그대로 두고 파생만 만든다.
@@ -94,12 +137,16 @@ export default function AdminUsersPage() {
             />
           </div>
 
+          {notice !== null && <NoticeBar notice={notice} />}
+
           {visibleUsers.length === 0 ? (
             <NoMatchState message="검색·필터 조건에 맞는 사용자가 없습니다." />
           ) : (
             <UserTable
               users={visibleUsers}
+              busy={busy}
               onToggle={toggleStatus}
+              onResync={resyncContext}
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={toggleSort}
@@ -135,15 +182,32 @@ function sortUsers(users: AdminUser[], key: SortKey, dir: SortDir): AdminUser[] 
   });
 }
 
+/** 행 조작 결과 한 줄. 성공은 옅은 초록, 실패는 옅은 빨강으로만 구분한다. */
+function NoticeBar({ notice }: { notice: Notice }) {
+  const tone =
+    notice.tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+      : "border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300";
+  return (
+    <div role="status" className={`mb-4 rounded-lg border px-4 py-2.5 text-sm ${tone}`}>
+      {notice.text}
+    </div>
+  );
+}
+
 function UserTable({
   users,
+  busy,
   onToggle,
+  onResync,
   sortKey,
   sortDir,
   onSort,
 }: {
   users: AdminUser[];
-  onToggle: (id: number) => void;
+  busy: RowAction | null;
+  onToggle: (user: AdminUser) => void;
+  onResync: (user: AdminUser) => void;
   sortKey: SortKey;
   sortDir: SortDir;
   onSort: (key: SortKey) => void;
@@ -180,14 +244,24 @@ function UserTable({
                 <td className="px-4 py-3">
                   <StatusBadge active={active} />
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onToggle(u.id)}
-                    className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                  >
-                    {active ? "비활성화" : "활성화"}
-                  </button>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-2">
+                    <RowButton
+                      onClick={() => onResync(u)}
+                      disabled={busy !== null}
+                      busy={busy?.id === u.id && busy.kind === "resync"}
+                      title="관심사를 agent 에 다시 밀어넣습니다"
+                    >
+                      재동기화
+                    </RowButton>
+                    <RowButton
+                      onClick={() => onToggle(u)}
+                      disabled={busy !== null}
+                      busy={busy?.id === u.id && busy.kind === "toggle"}
+                    >
+                      {active ? "비활성화" : "활성화"}
+                    </RowButton>
+                  </div>
                 </td>
               </tr>
             );
@@ -195,6 +269,37 @@ function UserTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * 행 안의 작은 조작 버튼. 요청이 도는 동안엔 눌린 버튼만 "…"로 바꾸고,
+ * 나머지는 흐리게 잠근다 — 두 요청이 겹쳐 결과 알림이 엇갈리는 걸 막는다.
+ */
+function RowButton({
+  onClick,
+  disabled,
+  busy,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  busy: boolean;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-busy={busy}
+      className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+    >
+      {busy ? "처리 중…" : children}
+    </button>
   );
 }
 
