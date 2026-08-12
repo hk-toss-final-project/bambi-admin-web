@@ -95,8 +95,9 @@ function GenerationStatus({
 }: {
   generations: AdminDashboard["generations"];
 }) {
-  const { inProgress, completedToday, failedToday, avgSeconds, maxSeconds } = generations;
-  // 진행 중이 쌓이는 건 큐 적체 신호다. 정상 운영에서는 워커 수(10) 언저리를 넘지 않는다.
+  const { inProgress, completedToday, failedToday, stalled, medianSeconds, maxSeconds } =
+    generations;
+  // 진행 중이 워커 수(10)를 크게 넘으면 큐가 밀리는 중이다.
   const backlog = inProgress >= 20;
 
   return (
@@ -110,12 +111,20 @@ function GenerationStatus({
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           label="진행 중"
           value={inProgress.toLocaleString()}
-          hint={backlog ? "큐가 밀려 있습니다" : "대기 · 생성 · 발행 중"}
+          hint={backlog ? "큐가 밀리는 중" : "최근 2시간 내 접수"}
           tone={backlog ? "warn" : "normal"}
+        />
+        {/* 정체를 진행 중과 합치면 "밀렸지만 돌아간다"로 읽힌다. 실제로는 며칠째
+            발행이 안 끝난 건이라 사람이 봐야 한다 — 그래서 칸을 따로 뒀다. */}
+        <StatCard
+          label="정체"
+          value={stalled.toLocaleString()}
+          hint={stalled > 0 ? "2시간 넘게 미발행" : "없음"}
+          tone={stalled > 0 ? "warn" : "normal"}
         />
         <StatCard
           label="오늘 완료"
@@ -129,9 +138,9 @@ function GenerationStatus({
           tone={failedToday > 0 ? "warn" : "normal"}
         />
         <StatCard
-          label="평균 소요"
-          value={formatDuration(avgSeconds)}
-          // 평균만 보면 꼬리가 안 보인다. 최장 건을 같이 낸다.
+          label="중앙 소요"
+          value={formatDuration(medianSeconds)}
+          // 중앙값만 보면 꼬리가 안 보인다. 최장 건을 같이 낸다.
           hint={maxSeconds === null ? "오늘 완료 건 없음" : `최장 ${formatDuration(maxSeconds)}`}
         />
       </div>
