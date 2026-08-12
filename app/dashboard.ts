@@ -30,8 +30,29 @@ export type AdminDashboard = {
     processing: number;
     /** 끝난 호출(성공+실패) 중 성공 비율(%). 처리 중은 분모에서 빠진다. */
     successRate: number;
-    /** 성공 호출 평균 소요시간(ms). 성공 건이 없으면 null → 화면은 "—" 로 둔다. */
+    /**
+     * 성공 호출 평균 **HTTP 왕복**(ms). 성공 건이 없으면 null → 화면은 "—" 로 둔다.
+     *
+     * ⚠️ AI 처리 시간이 아니다. 생성 요청은 agent 가 202 로 즉시 응답하므로 수십 ms 로 나온다.
+     * 리포트가 실제로 몇 분 걸리는지는 {@link AdminDashboard.generations} 를 봐야 한다.
+     */
     avgLatencyMs: number | null;
+  };
+  /**
+   * 리포트 생성 수명주기 — 접수(PENDING)부터 카드 발행(COMPLETED)까지.
+   *
+   * AI 호출 지표로는 큐가 밀렸는지 알 수 없다(생성 요청은 202 로 바로 성공 처리된다).
+   * 운영에서 리포트가 20분씩 걸린 날 대시보드가 정상으로 보였던 이유가 그것이다.
+   */
+  generations: {
+    /** 아직 안 끝난 접수(대기·진행·발행중). 기간 무관 — 어제 물린 것도 포함. */
+    inProgress: number;
+    completedToday: number;
+    failedToday: number;
+    /** 오늘 완료분 평균 소요(초). 큐 대기 포함 = 사용자 체감. 완료 건 없으면 null. */
+    avgSeconds: number | null;
+    /** 오늘 완료분 최장 소요(초). 평균만 보면 꼬리가 안 보인다. */
+    maxSeconds: number | null;
   };
   recentFailures: AdminAiLog[];
 };

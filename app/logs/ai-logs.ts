@@ -20,6 +20,13 @@ export type AdminAiLog = {
   userEmail: string | null; // 요청 사용자 (user_id 없으면 null)
   endpoint: string; // 호출한 agent 엔드포인트
   status: AiLogStatus;
+  /**
+   * agent 응답 HTTP 코드. 응답 자체가 없으면(타임아웃·연결 실패) null.
+   *
+   * 실패 목록에 엔드포인트만 있으면 "왜 실패했나"를 알 수 없어 한 건씩 상세를 열어야 했다.
+   * 503(agent 연결 실패)과 500(내부 오류)은 대응이 달라 한눈에 갈리는 편이 낫다.
+   */
+  statusCode: number | null;
   latencyMs: number | null; // 처리 중이면 null
 };
 
@@ -46,7 +53,6 @@ export function fetchAiLogs(status: AiLogStatusFilter = "ALL"): Promise<AdminAiL
  * 아직 처리 중이면 응답측 값(statusCode·respondedAt·responseBody)은 null 이다.
  */
 export type AdminAiLogDetail = AdminAiLog & {
-  statusCode: number | null; // agent 응답 HTTP 코드
   respondedAt: string | null; // 응답 기록 시각 (ISO)
   requestBody: string | null; // service → agent 요청 본문 원문
   responseBody: string | null; // agent → service 응답 본문 원문

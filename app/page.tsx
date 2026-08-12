@@ -43,7 +43,7 @@ export default function AdminHome() {
 }
 
 function Overview({ data }: { data: AdminDashboard }) {
-  const { users, reports, ai } = data;
+  const { users, reports, ai, generations } = data;
   return (
     <>
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -63,20 +63,79 @@ function Overview({ data }: { data: AdminDashboard }) {
           hint={`오늘 생성 ${reports.createdToday}`}
         />
         <StatCard
-          label="AI 성공률"
+          label="AI 호출 성공률"
           value={ai.total === 0 ? "—" : `${ai.successRate}%`}
+          // "평균 61ms" 를 AI 처리 시간으로 읽으면 안 된다 — 생성 요청은 agent 가 202 로
+          // 즉시 응답하므로 이건 HTTP 왕복이다. 실제 소요는 아래 "리포트 생성" 카드가 낸다.
           hint={
             ai.total === 0
               ? "아직 호출 없음"
-              : `평균 ${formatLatency(ai.avgLatencyMs)} · 처리중 ${ai.processing}`
+              : `접수 응답 ${formatLatency(ai.avgLatencyMs)} · 처리중 ${ai.processing}`
           }
           // 끝난 호출이 있는데 성공률이 낮으면 색으로 먼저 눈에 띄게 한다.
           tone={ai.success + ai.failed > 0 && ai.successRate < 90 ? "warn" : "normal"}
         />
       </section>
 
+      <GenerationStatus generations={generations} />
       <RecentFailures failures={data.recentFailures} failedTotal={ai.failed} />
     </>
+  );
+}
+
+/**
+ * 리포트 생성 현황 — 접수부터 카드 발행까지의 수명주기.
+ *
+ * 위 "AI 호출 성공률"로는 이걸 못 본다. 생성 요청은 agent 가 202 로 즉시 응답해
+ * 호출로는 항상 성공이고, 실제 리포트는 그 뒤에 워커가 만든다. 그래서 큐가 밀려
+ * 리포트가 20분씩 걸려도 위 카드들은 전부 정상으로 보인다(2026-08-12 운영 실측).
+ */
+function GenerationStatus({
+  generations,
+}: {
+  generations: AdminDashboard["generations"];
+}) {
+  const { inProgress, completedToday, failedToday, avgSeconds, maxSeconds } = generations;
+  // 진행 중이 쌓이는 건 큐 적체 신호다. 정상 운영에서는 워커 수(10) 언저리를 넘지 않는다.
+  const backlog = inProgress >= 20;
+
+  return (
+    <section className="mt-8">
+      <div className="mb-3">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          리포트 생성 현황
+        </h2>
+        <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+          요청 접수부터 카드가 나오기까지 — 위 AI 호출 지표와 다른 것을 잽니다
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="진행 중"
+          value={inProgress.toLocaleString()}
+          hint={backlog ? "큐가 밀려 있습니다" : "대기 · 생성 · 발행 중"}
+          tone={backlog ? "warn" : "normal"}
+        />
+        <StatCard
+          label="오늘 완료"
+          value={completedToday.toLocaleString()}
+          hint="카드까지 발행된 건"
+        />
+        <StatCard
+          label="오늘 실패"
+          value={failedToday.toLocaleString()}
+          hint="실패 · 취소 합계"
+          tone={failedToday > 0 ? "warn" : "normal"}
+        />
+        <StatCard
+          label="평균 소요"
+          value={formatDuration(avgSeconds)}
+          // 평균만 보면 꼬리가 안 보인다. 최장 건을 같이 낸다.
+          hint={maxSeconds === null ? "오늘 완료 건 없음" : `최장 ${formatDuration(maxSeconds)}`}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -113,6 +172,7 @@ function RecentFailures({
               <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                 <th className="px-4 py-3 font-medium">시각</th>
                 <th className="px-4 py-3 font-medium">사용자</th>
+                <th className="px-4 py-3 font-medium">응답</th>
                 <th className="px-4 py-3 font-medium">엔드포인트</th>
               </tr>
             </thead>
@@ -127,6 +187,11 @@ function RecentFailures({
                   </td>
                   <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
                     {row.userEmail ?? "—"}
+                  </td>
+                  {/* 상태코드 없이 엔드포인트만 있으면 한 건씩 상세를 열어야 원인을 안다.
+                      응답이 아예 없는 경우(타임아웃·연결 실패)도 그 자체가 정보라 구분해 쓴다. */}
+                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-amber-600 dark:text-amber-400">
+                    {row.statusCode ?? "무응답"}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-700 dark:text-zinc-300">
                     {row.endpoint}
@@ -199,6 +264,18 @@ function ShortcutCards() {
 function formatLatency(ms: number | null): string {
   if (ms === null) return "—";
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}초` : `${ms}ms`;
+}
+
+/**
+ * 생성 소요시간(초) 표기. 1분을 넘기면 "1분 34초" 가 "94초" 보다 즉시 읽힌다.
+ * 완료 건이 없으면 null 이 오고 "—" 로 둔다 — 0 으로 내리면 "0초에 끝났다"로 읽힌다.
+ */
+function formatDuration(seconds: number | null): string {
+  if (seconds === null) return "—";
+  if (seconds < 60) return `${seconds}초`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0 ? `${minutes}분` : `${minutes}분 ${rest}초`;
 }
 
 /** 대시보드는 최근 것만 보여주므로 날짜까지 다 쓰지 않고 월-일 시:분으로 줄인다. */
