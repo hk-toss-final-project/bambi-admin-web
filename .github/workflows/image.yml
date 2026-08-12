@@ -50,9 +50,15 @@ jobs:
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
           # 배포 origin 은 레포/조직 변수로 주입(레포에 URL 하드코딩 금지, CLAUDE.md §6).
-          # 변수 미설정 시 빌드 통과용 http://localhost 사용 → 실제 배포 전 반드시 변수 설정.
+          # 변수 미설정·빈값이면 빈값으로 빌드 → 런타임에 same-origin `/api/*`(nginx 프록시)로 요청.
+          #
+          # ⚠️ `|| 'http://localhost'` 폴백을 두면 안 된다(2026-08-12 장애). NEXT_PUBLIC_* 는
+          # 빌드 시점에 박히는 값이라, 변수를 지워도 이 폴백이 http://localhost 를 이미지에
+          # 구워넣는다. 배포된 화면이 사용자 PC 의 localhost 를 호출하고 Host 가 운영 도메인과
+          # 달라 nginx default_server 의 return 444 에 걸려 CORS preflight 부터 끊긴다.
+          # service-web 은 같은 이유로 폴백을 이미 제거했다 — 형식을 통일한다.
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'http://localhost' }}
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
