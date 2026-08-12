@@ -16,15 +16,27 @@ import type { ApiResponse } from "@/types/api";
  * - 응답은 공통 envelope({success,data,error})로 해석하고, 실패는 ApiError 로 throw 한다.
  */
 
-/** NEXT_PUBLIC_API_URL(origin, 끝 슬래시 없음)을 검증해 반환. 누락 시 원인 명시 throw(§6). */
+/**
+ * API base(origin) 결정 — same-origin fallback (service-web 과 동일 규약).
+ * - 값이 있으면(trim 후 비어 있지 않으면) 그 origin 을 쓰고 끝 슬래시를 제거한다(절대 URL).
+ * - 미설정·빈 문자열·공백뿐이면 빈 문자열을 반환한다 → 요청이 `/api/...` 상대경로로
+ *   현재 origin(same-origin)에 간다. 운영은 nginx 가 같은 origin 의 `/api/*` 를
+ *   service-api 로 전달하는 것을 전제로 한다.
+ *
+ * <p>예전에는 미설정 시 throw 했는데, `NEXT_PUBLIC_*` 는 <b>빌드 시점에 박히는</b> 값이라
+ * CI 가 `vars.NEXT_PUBLIC_API_URL || 'http://localhost'` 로 빌드를 통과시키면
+ * `http://localhost` 가 그대로 이미지에 구워진다. 그러면 배포된 관리자 화면이
+ * 사용자 브라우저에서 `http://localhost/api/...` 를 호출하고, Host 가 운영 도메인과
+ * 달라 nginx `default_server` 의 `return 444` 에 걸려 CORS preflight 부터 끊긴다
+ * (2026-08-12 운영 장애: 관리자 콘솔 전체가 "일시적인 오류" 로 표시됨).
+ *
+ * <p>service-web 은 2026-07-24 에 같은 이유로 이미 same-origin fallback 으로 바꿨다.
+ * 여기서 규약을 통일해 환경변수 유무와 무관하게 배포가 동작하게 한다.
+ */
 export function getApiBaseUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_API_URL;
-  if (!raw) {
-    throw new Error(
-      "[api] NEXT_PUBLIC_API_URL 이 설정되지 않았습니다. .env.local 에 origin(예: http://localhost)을 지정하세요.",
-    );
-  }
-  return raw.replace(/\/+$/, ""); // 끝 슬래시가 있어도 안전하게 제거
+  const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (!raw) return ""; // 미설정·빈 문자열·공백 → same-origin 상대경로
+  return raw.replace(/\/+$/, ""); // 절대 origin, 끝 슬래시 제거(중복 슬래시 방지)
 }
 
 /**

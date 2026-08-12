@@ -61,7 +61,9 @@ type ApiResponse<T> = {
 
 - **`NEXT_PUBLIC_API_URL`은 origin만 담는다 (`/api` 접두사 없음, 끝 슬래시 없음).** 예: `http://localhost`
 - `/api`를 포함한 전체 경로는 호출부가 넘긴다 (예: `apiPost("/api/auth/login", ...)`) → 코드상 경로가 API 명세와 1:1.
-- URL 조립은 공통 client(`getApiBaseUrl`) 1곳에서만 한다. 컴포넌트·유틸에서 `localhost`·IP·배포 도메인 하드코딩 금지. 환경변수 누락 시 client가 원인을 명시해 throw 한다.
+- URL 조립은 공통 client(`getApiBaseUrl`) 1곳에서만 한다. 컴포넌트·유틸에서 `localhost`·IP·배포 도메인 하드코딩 금지.
+- **미설정 시 same-origin 상대경로로 폴백한다** (2026-08-12, service-web §6과 통일). 예전에는 throw 했는데, `NEXT_PUBLIC_*`는 **빌드 시점에 박히는** 값이라 CI가 `vars.NEXT_PUBLIC_API_URL || 'http://localhost'`로 빌드를 통과시키면 `http://localhost`가 이미지에 구워진다 → 배포 화면이 사용자 PC의 localhost를 호출하고, Host가 운영 도메인과 달라 nginx `default_server`의 `return 444`에 걸려 CORS preflight부터 끊긴다(실제 장애: 관리자 콘솔 전체가 "일시적인 오류").
+  운영은 nginx가 같은 origin의 `/api/*`를 service-api로 전달하므로 **변수를 비워두는 것이 정상 배포 형태**다.
 
 ---
 
