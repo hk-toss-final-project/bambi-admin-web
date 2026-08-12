@@ -45,13 +45,23 @@ export type AdminDashboard = {
    * 운영에서 리포트가 20분씩 걸린 날 대시보드가 정상으로 보였던 이유가 그것이다.
    */
   generations: {
-    /** 아직 안 끝난 접수(대기·진행·발행중). 기간 무관 — 어제 물린 것도 포함. */
+    /** 최근(2시간 내) 접수 중 아직 안 끝난 것 = 실제로 처리되고 있는 건. */
     inProgress: number;
+    /**
+     * 2시간을 넘겨 미종료로 남은 것 = **사람이 봐야 하는 것**.
+     *
+     * 진행 중과 갈라야 한다. 미종료를 전부 "진행 중"으로 셌더니 운영에서 102건이 나왔는데
+     * 전부 2~5일 묵은 PUBLISHING 고아였다 — "밀렸지만 돌아간다"로 읽혀 정반대 인상을 준다.
+     */
+    stalled: number;
     completedToday: number;
     failedToday: number;
-    /** 오늘 완료분 평균 소요(초). 큐 대기 포함 = 사용자 체감. 완료 건 없으면 null. */
-    avgSeconds: number | null;
-    /** 오늘 완료분 최장 소요(초). 평균만 보면 꼬리가 안 보인다. */
+    /**
+     * 오늘 완료분 **중앙값** 소요(초). 큐 대기 포함 = 사용자 체감. 완료 건 없으면 null.
+     * 평균이 아니다 — 실측에서 5시간 45분짜리 한 건이 평균을 16분으로 끌어올렸다(중앙값 8분 48초).
+     */
+    medianSeconds: number | null;
+    /** 오늘 완료분 최장 소요(초). 중앙값만 보면 꼬리가 안 보인다. */
     maxSeconds: number | null;
   };
   recentFailures: AdminAiLog[];
