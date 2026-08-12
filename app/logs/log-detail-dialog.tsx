@@ -11,6 +11,7 @@ import { resolveErrorMessage } from "@/constants/errors";
 import { ApiError } from "@/lib/api-client";
 
 import { type AdminAiLogDetail, fetchAiLogDetail } from "./ai-logs";
+import { formatLogTime } from "./format-time";
 
 export function LogDetailDialog({
   logId,
@@ -108,10 +109,10 @@ function DetailBody({ detail }: { detail: AdminAiLogDetail }) {
         <Meta label="엔드포인트" value={detail.endpoint} mono />
         <Meta label="사용자" value={detail.userEmail ?? "—"} />
         <Meta label="상태 코드" value={detail.statusCode?.toString() ?? "—"} />
-        <Meta label="요청 시각" value={formatTime(detail.requestedAt)} />
+        <Meta label="요청 시각" value={formatLogTime(detail.requestedAt)} />
         <Meta
           label="응답 시각"
-          value={detail.respondedAt !== null ? formatTime(detail.respondedAt) : "처리 중"}
+          value={detail.respondedAt !== null ? formatLogTime(detail.respondedAt) : "처리 중"}
         />
       </dl>
 
@@ -163,7 +164,3 @@ function prettyJson(raw: string): string {
   }
 }
 
-/** ISO 시각을 "YYYY-MM-DD HH:mm" 로. 문자열만 잘라 시간대·hydration 흔들림을 피한다. */
-function formatTime(iso: string): string {
-  return iso.replace("T", " ").slice(0, 16);
-}

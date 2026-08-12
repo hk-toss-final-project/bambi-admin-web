@@ -287,14 +287,21 @@ function formatDuration(seconds: number | null): string {
   return rest === 0 ? `${minutes}분` : `${minutes}분 ${rest}초`;
 }
 
-/** 대시보드는 최근 것만 보여주므로 날짜까지 다 쓰지 않고 월-일 시:분으로 줄인다. */
+/**
+ * 대시보드는 최근 것만 보여주므로 날짜까지 다 쓰지 않고 월-일 시:분으로 줄인다.
+ *
+ * <p>`timeZone` 을 반드시 넘긴다 — 생략하면 렌더하는 쪽의 시간대를 따라가서 서버(UTC)와
+ * 브라우저(KST)가 다른 값을 만든다. 한국 시간으로 고정해야 로그 화면과도 표기가 맞는다.
+ */
 function formatTime(iso: string): string {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return iso;
   return at.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
   });
 }

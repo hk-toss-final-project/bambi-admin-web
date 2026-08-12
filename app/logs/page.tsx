@@ -21,6 +21,7 @@ import {
   type AiLogStatusFilter,
   fetchAiLogs,
 } from "./ai-logs";
+import { formatLogTime } from "./format-time";
 import { LogDetailDialog } from "./log-detail-dialog";
 
 const STATUS_FILTERS: ReadonlyArray<{ value: AiLogStatusFilter; label: string }> = [
@@ -176,7 +177,7 @@ function LogTable({
               className="cursor-pointer border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-900/40"
             >
               <td className="px-4 py-3 tabular-nums text-zinc-500 dark:text-zinc-400">
-                {formatTime(row.requestedAt)}
+                {formatLogTime(row.requestedAt)}
               </td>
               <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
                 {row.userEmail ?? "—"}
@@ -236,11 +237,6 @@ function StatusBadge({ status }: { status: AiLogStatus }) {
       {badge.label}
     </span>
   );
-}
-
-/** 백엔드 ISO 시각을 "YYYY-MM-DD HH:mm" 로. 문자열만 잘라 시간대·hydration 흔들림을 피한다. */
-function formatTime(iso: string): string {
-  return iso.replace("T", " ").slice(0, 16);
 }
 
 /** 소요시간을 사람이 읽기 편한 단위로. 아직 안 끝난 요청은 값이 없으니 "—". */
