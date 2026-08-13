@@ -8,11 +8,21 @@
 
 import Link from "next/link";
 
+import { AuthGate } from "./_components/auth-gate";
+
 import { EmptyState, ErrorState, LoadingRows } from "./_components/async-states";
 import { useAsyncData } from "./_hooks/use-async-data";
 import { type AdminDashboard, fetchDashboard } from "./dashboard";
 
 export default function AdminHome() {
+  return (
+    <AuthGate>
+      <AdminHomeBody />
+    </AuthGate>
+  );
+}
+
+function AdminHomeBody() {
   const { data, error, retry } = useAsyncData(fetchDashboard);
 
   return (

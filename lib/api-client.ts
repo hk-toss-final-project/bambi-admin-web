@@ -40,6 +40,14 @@ export function getApiBaseUrl(): string {
 }
 
 /**
+ * 토큰 만료·무효를 화면 계층에 알리는 window 이벤트 이름.
+ *
+ * 요청 계층에서 직접 라우터를 부르지 않고 이벤트만 쏜다 — 동시에 뜬 요청들이 각자
+ * 네비게이션을 걸면 무한 리다이렉트가 되기 때문이다(§4·§5). 듣는 쪽은 `AuthGate` 하나뿐이다.
+ */
+export const AUTH_EXPIRED_EVENT = "bambi:auth-expired";
+
+/**
  * API 실패를 나타내는 에러. 화면은 code 로 문구를 결정한다(rawMessage 는 로깅 전용).
  * code 는 알려진 ErrorCode 로 정규화되며, 미상 코드는 INTERNAL_ERROR 로 취급한다(§4).
  */
@@ -112,7 +120,14 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     const message = payload.error?.message ?? "";
     // 토큰 만료·무효: 저장 토큰만 제거한다. 리다이렉트는 상위(라우트 가드/레이아웃)의 책임 →
     // 여기서 네비게이션하지 않아 무한 리다이렉트·재요청을 방지한다(§4·§5).
-    if (isAuthTokenError(code)) clearAccessToken();
+    if (isAuthTokenError(code)) {
+      clearAccessToken();
+      // 화면 계층(AuthGate)이 듣고 로그인으로 보낸다. 여기서 직접 이동하지 않는 이유는
+      // 동시에 뜬 요청들이 각자 네비게이션을 걸면 무한 리다이렉트가 되기 때문이다(§4·§5).
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+      }
+    }
     throw new ApiError(code, message, res.status);
   }
 
