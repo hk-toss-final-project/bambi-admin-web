@@ -12,6 +12,8 @@
 
 import { useMemo, useState } from "react";
 
+import { AuthGate } from "../_components/auth-gate";
+
 import { resolveErrorMessage } from "@/constants/errors";
 import { ApiError } from "@/lib/api-client";
 
@@ -42,6 +44,14 @@ const STATUS_FILTERS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
 ];
 
 export default function AdminUsersPage() {
+  return (
+    <AuthGate>
+      <AdminUsersPageBody />
+    </AuthGate>
+  );
+}
+
+function AdminUsersPageBody() {
   // users === null 로딩 중 · [] 불러왔지만 비어 있음 · error 실패 — 이 셋으로 화면을 분기한다.
   const { data: users, error, retry, setData: setUsers } = useAsyncData(fetchAdminUsers);
 

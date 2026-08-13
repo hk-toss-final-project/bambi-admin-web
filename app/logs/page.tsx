@@ -10,6 +10,8 @@
 // 로그 적재는 실제 Gateway(P1)부터라 그전까진 빈 목록(Empty)이 정상이다.
 
 import { useSearchParams } from "next/navigation";
+
+import { AuthGate } from "../_components/auth-gate";
 import { Suspense, useCallback, useMemo, useState } from "react";
 
 import { EmptyState, ErrorState, LoadingRows } from "../_components/async-states";
@@ -36,6 +38,14 @@ const STATUS_FILTERS: ReadonlyArray<{ value: AiLogStatusFilter; label: string }>
  * fallback 은 평소 로딩과 같은 스켈레톤이라 사용자 눈엔 차이가 없다.
  */
 export default function AdminAiLogsPage() {
+  return (
+    <AuthGate>
+      <AdminAiLogsPageBody />
+    </AuthGate>
+  );
+}
+
+function AdminAiLogsPageBody() {
   return (
     <Suspense fallback={<LoadingShell />}>
       <AiLogsView />
